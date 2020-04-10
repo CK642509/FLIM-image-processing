@@ -1,0 +1,53 @@
+// This is version 1.
+
+// Duplicate the image
+run("Duplicate...", "title=duplicate"); 
+selectWindow("duplicate");
+
+// Analyze the edge and close the duplicated window
+run("Canny Edge Detector", "gaussian=5 low=2.5 high=7.5");
+run("Analyze Particles...", "size=300-Infinity circularity=0.50-1.00 clear include add");
+n = roiManager("count");     // n = number of nucleus
+selectWindow("duplicate");
+close();
+
+// Show the edge and ask if it's OK
+// If not, ask user to draw by himself
+msg = "Fail to circle the cell.\n";
+msg2 = "Press \"OK\" and circle the cell by yourself.\n";
+msg3 = "Press \"Cancel\" to quit the scrip.";
+
+// If the anlyzation did not get the edge
+if (n == 0) {
+	showMessageWithCancel("Oops...", msg + msg2 + msg3);
+	run("Set... ", "zoom=300");
+	setTool("polygon"); 
+	waitForUser("Next step", "Circle the cell and press \"OK\".");
+}
+
+// If get more than one, select the first one
+else {
+	run("Set... ", "zoom=300"); 	
+	roiManager("Select", 0);
+	
+	yesno = getBoolean("Is the selection OK?");
+
+	if (yesno == 0) {
+		roiManager("Deselect");
+		setTool("polygon");
+		waitForUser("Next step", "Circle the cell and press \"OK\".");
+	}
+}
+
+createmask();
+run("Save");
+close();
+
+
+// define function
+function createmask() {
+	setForegroundColor(0, 0, 0);
+	run("Fill", "slice");
+	setBackgroundColor(255, 255, 255);
+	run("Clear Outside");
+}

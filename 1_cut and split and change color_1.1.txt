@@ -1,0 +1,174 @@
+// This is vesion 1.1
+// with number
+// Add one more folder.
+
+dir = getDirectory("Choose the folder of target image");
+
+list = getFileList(dir);
+check = 0;  // Make sure there is only folders.
+
+for (i=0; i<list.length; i++) {
+	// Remove"/", so that the filename will be correct.
+	slashIndex = indexOf(list[i], "/");
+	if (slashIndex != -1) {
+		list[i] = substring(list[i], 0, slashIndex); 
+		print(list[i]);
+	}
+	
+	// Make sure there is only folders.
+	else {
+		print(list[i]);
+		print("Only folders can exist!")
+		check = 1;
+	}
+}
+
+// Create folders and put the files into the raw folder
+if (check == 0) {
+	for (i=0; i<list.length; i++) {
+
+		dir_number = dir + list[i];
+		list2 = getFileList(dir_number);
+
+		for (k=0; k<list2.length;k++) {
+		
+			dir2 = dir + list[i] + File.separator + list2[k];
+			rawlist = getFileList(dir2);
+			File.makeDirectory(dir2 + File.separator + "raw");
+			File.makeDirectory(dir2 + File.separator + "cut");
+			File.makeDirectory(dir2 + File.separator + "red");
+			File.makeDirectory(dir2 + File.separator + "green");
+			File.makeDirectory(dir2 + File.separator + "nucleus mask");
+			File.makeDirectory(dir2 + File.separator + "label nucleus mask");
+			File.makeDirectory(dir2 + File.separator + "red dot green background");
+			File.makeDirectory(dir2 + File.separator + "label with number");
+
+			// Put the image into raw file
+			for (j=0; j<rawlist.length; j++) {
+				File.rename(dir2 + File.separator + rawlist[j], dir2 + File.separator + "raw" + File.separator + rawlist[j]);
+			}
+		}
+	}
+}
+
+
+// Start cutting and splitting
+if (check == 0) {
+	for (i=0; i<list.length; i++) {
+		
+		dir_number = dir + list[i];
+		list2 = getFileList(dir_number);
+
+		for (a=0; a<list2.length; a++) {
+			// Remove"/", so that the filename will be correct.
+			slashIndex = indexOf(list2[a], "/");
+			if (slashIndex != -1) {
+			list2[a] = substring(list2[a], 0, slashIndex); 
+			print(list2[a]);
+			}
+	
+			// Make sure there is only files.
+			else {
+				print(list2[a]);
+				print("Only files can exist!")
+				check = 1;
+			}
+		}
+
+		for (k=0; k<list2.length;k++) {
+
+			raw = dir + list[i] + File.separator + list2[k] + File.separator + "raw";
+			list_raw = getFileList(raw);
+	
+			savepath = dir + list[i] + File.separator + list2[k] + File.separator + "cut" + File.separator + list[i];
+			savepath2 = dir + list[i] + File.separator + list2[k] + File.separator + "red" + File.separator + list[i];
+			savepath3 = dir + list[i] + File.separator + list2[k] + File.separator + "green" + File.separator + list[i];
+			savepath4 = dir + list[i] + File.separator + list2[k] + File.separator + "nucleus mask" + File.separator + list[i];
+			
+			for (j=0; j<list_raw.length; j++) {
+				file = dir + list[i] + File.separator + list2[k] + File.separator + "raw" + File.separator + list_raw[j];     // Define the path
+				open(file);     // Open the target image
+				imagename = getInfo("image.filename");
+
+				// Cut
+				run("Canvas Size...", "width=256 height=256 position=Center-Left");
+				saveAs("Tiff", savepath + " " + list2[k] + " " + j);
+				
+				// Split
+				run("Split Channels");
+				selectWindow(list[i] + " " + list2[k] + " " + j + ".tif" + " (blue)");
+				close();
+				selectWindow(list[i] + " " + list2[k] + " " + j + ".tif" + " (red)");
+				saveAs("Tiff", savepath2 + " " + list2[k] + " " + j + ".tif");
+				saveAs("Tiff", savepath4 + " " + list2[k] + " " + j + ".tif");
+				close();
+				selectWindow(list[i] + " " + list2[k] + " " + j + ".tif" + " (green)");
+				saveAs("Tiff", savepath3 + " " + list2[k] + " " + j + ".tif");
+				close();
+				print(i+"."+imagename);
+			}
+		}
+	}
+	
+}
+
+
+// Change color
+for (i=0; i<list.length; i++) {
+	for (k=0; k<list2.length; k++) {
+		dir_cn = dir + list[i] + File.separator + list2[k];   // cn = cancer normal
+		dir_cut = dir_cn + File.separator + "cut";
+		cut_list = getFileList(dir_cut);
+		for (m=0; m<cut_list.length; m++) {
+			file = dir_cut + File.separator + cut_list[m];     // Define the path
+			print(file);
+			filename = dir_cn + File.separator + "red dot green background" + File.separator + cut_list[m];
+			open(file);     // Open the target image file
+			run("Split Channels");
+			selectWindow(cut_list[m] + " (blue)");  
+			close();
+			selectWindow(cut_list[m] + " (green)");
+			run("MultiThresholder", "Otsu apply");
+			run("Invert");
+			run("Analyze Particles...", "clear include add");
+			selectWindow(cut_list[m] + " (red)");
+
+			// Set LUT
+			reds = newArray(256); 
+			greens = newArray(256); 
+			blues = newArray(256);
+			for (l=0; l<256; l++) {
+				reds[l] = 0;
+				greens[l] = l*139/256;
+				blues[l] = l*40/256;
+			}
+			setLut(reds, greens, blues);
+	
+			run("RGB Color");
+	
+			n = roiManager("count");     // n = number of dots
+			if (n > 1) {
+				selectWindow(cut_list[m] + " (red)");
+				roiManager("Combine");
+				setForegroundColor(255, 0, 0);
+				run("Draw", "slice"); 
+			}
+	
+			if (n == 1) {
+				selectWindow(cut_list[m] + " (red)");
+				roiManager("Select", 0);
+				setForegroundColor(255, 0, 0);
+				run("Draw", "slice");
+			}
+			saveAs("Tiff", filename);
+			close();
+			selectWindow(cut_list[m] + " (green)");
+			close();
+		}
+	}	
+}
+
+// Finish
+print("Finished!");
+
+

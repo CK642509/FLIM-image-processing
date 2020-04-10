@@ -1,0 +1,48 @@
+// This is vesion 1.
+
+// Create a dialog
+Dialog.create("Cut and Split 1.0");
+Dialog.addString("Imagename:", "name");
+Dialog.show();
+
+filename = Dialog.getString();
+
+// Select the folder
+dir_raw = getDirectory("Choose the folder of target image");
+list = getFileList(dir_raw);
+
+dir_cut = getDirectory("Choose the folder to save the cut image");
+dir_red = getDirectory("Choose the folder to save the red image");
+dir_green = getDirectory("Choose the folder to save the green image");
+
+// Set the savepaths
+savepath_cut = dir_cut + filename;
+savepath_red = dir_red + filename;
+savepath_green = dir_green + filename;
+
+setBatchMode(true);
+
+// Start cut and split
+for (i=0; i<list.length; i++) {
+	file = dir_raw + list[i];     // define the path
+	open(file);     // open the target image
+	imagename = getInfo("image.filename");     // get image name
+
+	// Cut
+	run("Canvas Size...", "width=256 height=256 position=Center-Left");
+	saveAs("Tiff", savepath_cut + " " + i);
+
+	// Split
+	run("Split Channels");
+	selectWindow(filename + " " + i + ".tif" + " (blue)");
+	close();
+	selectWindow(filename + " " + i + ".tif" + " (red)");
+	saveAs("Tiff", savepath_red + " " + i + ".tif");
+	close();
+	selectWindow(filename + " " + i + ".tif" + " (green)");
+	saveAs("Tiff", savepath_green + " " + i + ".tif");
+	close();
+	print(i + ". " + imagename);
+}
+
+setBatchMode(false);

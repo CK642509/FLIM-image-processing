@@ -1,0 +1,166 @@
+setBatchMode(true);
+
+dir_mask = getDirectory("Choose the folder of cell mask");
+dir_g = getDirectory("Choose the folder of G4 foci images");
+dir_r = getDirectory("Choose the folder of cell images");
+dir_rdgb = getDirectory("Choose the folder of red dot green background image");
+dir_label = getDirectory("Choose the folder to save the labeled image");
+dir_labelnum = getDirectory("Choose the folder to save the labeled rdgb image");
+
+// get the file list in the selected folder 
+list = getFileList(dir_mask);
+ 
+count = 0;
+
+logpath = dir_label + "log.txt";
+
+resultFile = File.open(logpath);
+// create the first column in the text file
+print(resultFile, "filename" + "\t" + "total # of nucleus" + "\t" + "# of nucleus" + "\t" + "size of the nucleus (pixel)" + "\t" + "integrated G4 signal" +  "\t" + "T(lower)" + "\t" + "T(upper)" + "\t" + "# of G4 foci");
+
+// create a loop for analyzing the files in the selected folder
+for (j=0; j<imagelist.length; j++) {
+	// initialize the value of parameters
+    meanL = 0;  minL = 0;  maxL = 0; stdL = 0;
+	meanP = 0;  minP = 0;  maxP = 0; stdP = 0;
+    //open and analyze all the TIFs found
+    if (endsWith(toLowerCase(imagelist[j]), ".tif")) {
+    	file_mask = dir_mask + File.separator + imagelist[j];   //file
+		filename = imagelist[j];   //define the name
+	  	print(++count + ": " + dir_mask + File.separator + imagelist[j]);  //show the analyzing item
+		// create result text file (for lipid)    
+		file_g = dir_g + File.separator + imagelist[j];   // file2
+		file_r = dir_r + File.separator + imagelist[j];   // file4
+		file_rdgb = dir_rdgb + File.separator + imagelist[j];
+		filename_label = dir_label + File.separator + imagelist[j] + "-(labeled)"; // filename3
+		filename_labelnum = dir_labelnum + File.separator + imagelist[j] + "-(labeled)";
+		analyzefoci(file_mask, file_g, file_r, resultFile);   // main analysis procedure  
+    }
+}
+File.close(resultFile);
+print("Finished!");
+exit();
+
+//##########################
+
+// main analysis procedure
+function analyzefoci(file_mask, file_g, file_r, resultFile) {
+	// initialize the value of parameters
+	Q=0;    n=0; m=0;    nBins = 256;    nBins2 = 256; x=0; y=0;
+
+	//set the parameter for reading the image file
+	open(file_mask);  //open the image file
+	title_mask = getTitle;
+	print(title_mask);
+	run("Set Scale...", "known=0 pixel=0 unit=0 global");     // usually no use
+	selectWindow(title_mask);
+	run("Analyze Particles...", "size=0-infinity circularity=0.00-1.00 clear include add");
+	n = roiManager("count");
+	close();
+
+	//counting the G4 foci in each cell
+	open(file_g);  //open the image file
+	title_g = getTitle;
+	run("MultiThresholder", "Otsu");
+	getThreshold(x, y);
+	z = y - 2;
+	if (z < 0) {
+		z = 0;
+	}
+  	run("MultiThresholder", "Otsu apply");
+  	close();
+
+  	open(file_g);  //open the image file
+  	title_g = getTitle;
+
+  	row = 0;
+  	for (j=0; j<n; j++) {
+  		Pc=0; Pv=0; P=0; PQ=0; A=0; C=0;  row=0; row2=0; s=0;
+		run("Select None");
+		selectWindow(title_g);
+		roiManager("Select", j);
+		getRawStatistics(nPixelsP, meanP, minP, maxP, stdP, histogram);
+		getHistogram(values, counts, nBins);     // There are 256 bins in histogram
+		for (k=0; k<nBins; k++) {
+			setResult("Value", row, values[k]);
+			setResult("Count", row, counts[k]);     // Because both counts and k = 0~256, so k = counts
+			Pc=counts[k];
+			Pv=values[k];
+			PQ = PQ + Pc*Pv;
+			if (k>z) {
+				C = C+ Pc;     // Only add counts whose intensity higher than
+			}
+			A=A+Pc;     // Add up counts, then we can get area
+			row++;
+		}
+		i=j+1;
+		updateResults();
+		selectWindow("Results");
+		run("Close");
+
+		//output to resultFile
+		print(resultFile, filename + "\t" + n + "\t" + i + "\t" + A + "\t" + PQ + "\t" + x + "\t" + y + "\t" + C );
+  	}
+ 	selectWindow(title_g);
+	close();
+
+	open(file_r);  //open the image file
+	title_r = getTitle;
+	roiManager("Show All");
+	run("Flatten");
+	selectWindow(title_r);
+	close();
+
+	title3 = getTitle; //?????????????????????????????????????????
+	
+	open(file_g);  //open the image file
+	title_g = getTitle;
+	resetThreshold();
+	roiManager("reset");
+	setThreshold(y, 255);
+	run("Convert to Mask");
+	setOption("BlackBackground", false);
+	run("Analyze Particles...", "size=0-infinity circularity=0.00-1.00 clear include add");
+	m = roiManager("count");
+	if (m>1) {
+		selectWindow(title_g);
+		close();
+		selectWindow(title3);
+		roiManager("Combine");
+		setForegroundColor(0, 255, 0);
+		run("Draw", "slice");
+		saveAs("tif", filename_label);
+		close();
+	}
+	if (m==1) {
+		selectWindow(title_g);
+		close();
+		selectWindow(title3);
+		roiManager("Select", 0);
+		setForegroundColor(0, 255, 0);
+		run("Draw", "slice"); // Fill ???    It used to be fill
+		saveAs("tif", filename_label);
+		close();
+	}
+	if (m==0) {
+		selectWindow(title_g);
+		close();
+		selectWindow(title3);
+		saveAs("tif", filename_label);
+		close();
+	}
+	roiManager("reset");
+
+	// Add number
+	open(file_rdgb);
+	setColor("white");
+	setFont("SansSerif", 25, "bold");
+	drawString(C, 210, 240);
+	saveAs("tif", filename_labelnum);
+	close();
+}
+
+setBatchMode(false);
+
+// Finish
+print("Finished!");

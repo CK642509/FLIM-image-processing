@@ -1,0 +1,57 @@
+//This is version 1. 
+
+dir_cut = getDirectory("Choose the folder of cut image");
+list = getFileList(dir_cut);
+
+dir_save = getDirectory("Choose the folder to save the color-changed image");
+
+// Start
+for (i=0; i<list.length; i++) {
+	file = dir_cut + list[i];     // Define the path
+	print(file);
+	filename = dir_save + list[i];
+	open(file);     // Open the target image
+	run("Split Channels");
+	selectWindow(list[i] + " (blue)");  
+	close();
+	selectWindow(list[i] + " (green)");
+	run("MultiThresholder", "Otsu apply");     // Otsu
+	run("Invert");
+	run("Analyze Particles...", "clear include add");     // Get G4 foci
+	selectWindow(list[i] + " (red)");
+	
+	// Set LUT
+	reds = newArray(256); 
+	greens = newArray(256); 
+	blues = newArray(256);
+	for (j=0; j<256; j++) {
+		reds[j] = 0;
+		greens[j] = j*139/256;
+		blues[j] = j*40/256;
+	}
+	setLut(reds, greens, blues);
+	
+	run("RGB Color");
+
+	n = roiManager("count");     // n = number of dots
+	if (n > 1) {
+		selectWindow(list[i] + " (red)");
+		roiManager("Combine");
+		setForegroundColor(255, 0, 0);
+		run("Draw", "slice"); 
+	}
+
+	if (n == 1) {
+		selectWindow(list[i] + " (red)");
+		roiManager("Select", 0);
+		setForegroundColor(255, 0, 0);
+		run("Draw", "slice");
+	}
+	saveAs("Tiff", filename);
+	close();
+	selectWindow(list[i] + " (green)");
+	close();
+}
+
+selectWindow("ROI Manager");
+run("Close");
